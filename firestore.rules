@@ -1,0 +1,1063 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all (Global Safety Net)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // PRIMITIVE HELPERS
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidEmailId(id) {
+      return id is string && id.size() >= 3 && id.size() <= 160 && id.matches('^[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function isValidAuthorizedUids(uids) {
+      return uids is list && uids.size() >= 1 && uids.size() <= 20 && uids[0] is string && uids[0].size() <= 128;
+    }
+
+    function isValidStringList(arr, maxLen) {
+      return arr is list && arr.size() <= maxLen && (arr.size() == 0 || (arr[0] is string && arr[0].size() <= 160));
+    }
+
+    // Bootstrap Master Admin from runtime owner email (verified only)
+    function isBootstrapAdmin() {
+      return isVerified() && request.auth.token.email == 'cleisson.md@gmail.com';
+    }
+
+    function hasUserDoc() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function getUserDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActiveUser() {
+      return isVerified() && (
+        isBootstrapAdmin() ||
+        (hasUserDoc() && getUserDoc().status == 'ACTIVE')
+      );
+    }
+
+    function isMasterAdmin() {
+      return isVerified() && (
+        isBootstrapAdmin() ||
+        (hasUserDoc() && getUserDoc().status == 'ACTIVE' && getUserDoc().role == 'MASTER_ADMIN')
+      );
+    }
+
+    function isOpOrMasterAdmin() {
+      return isVerified() && (
+        isBootstrapAdmin() ||
+        (hasUserDoc() && getUserDoc().status == 'ACTIVE' && (getUserDoc().role == 'MASTER_ADMIN' || getUserDoc().role == 'OPERATIONAL_ADMIN'))
+      );
+    }
+
+    function canWriteOperational() {
+      return isVerified() && (
+        isBootstrapAdmin() ||
+        (hasUserDoc() && getUserDoc().status == 'ACTIVE' && getUserDoc().role in ['MASTER_ADMIN', 'OPERATIONAL_ADMIN', 'MEMBER'])
+      );
+    }
+
+    function isTeamInResource(resData) {
+      return isVerified() && (isBootstrapAdmin() || request.auth.uid in resData.authorizedUids);
+    }
+
+    // =========================================================================
+    // VALIDATION BLUEPRINTS (Pillar 2: Called on both create & update)
+    // =========================================================================
+
+    function isValidUser(data, userId) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role', 'status', 'permissions', 'authorizedUids', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'name', 'email', 'role', 'status', 'roleTitle', 'permissions', 'authorizedUids', 'createdAt', 'updatedAt', 'lastLoginAt'])
+        && data.uid is string && data.uid == userId && isValidId(data.uid)
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.role in ['MASTER_ADMIN', 'OPERATIONAL_ADMIN', 'MEMBER', 'VIEWER']
+        && data.status in ['ACTIVE', 'INACTIVE']
+        && (!('roleTitle' in data) || (data.roleTitle is string && data.roleTitle.size() <= 100))
+        && data.permissions is map
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('lastLoginAt' in data) || data.lastLoginAt is timestamp);
+    }
+
+    function isValidInvite(data) {
+      return data.keys().hasAll(['email', 'name', 'role', 'status', 'invitedBy', 'authorizedUids', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['email', 'name', 'role', 'roleTitle', 'permissions', 'status', 'invitedBy', 'authorizedUids', 'createdAt', 'updatedAt'])
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.role in ['OPERATIONAL_ADMIN', 'MEMBER', 'VIEWER']
+        && (!('roleTitle' in data) || (data.roleTitle is string && data.roleTitle.size() <= 100))
+        && (!('permissions' in data) || data.permissions is map)
+        && data.status in ['PENDING', 'ACCEPTED', 'REVOKED']
+        && data.invitedBy is string && isValidId(data.invitedBy)
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSystemConfig(data) {
+      return data.keys().hasAll(['companyName', 'baseAddress', 'baseCity', 'vehicleConsumptionKmPerL', 'fuelPricePerLiter', 'paymentTerms', 'guestBrackets', 'cityRules', 'authorizedUids', 'updatedBy', 'updatedAt'])
+        && data.keys().hasOnly(['companyName', 'baseAddress', 'baseCity', 'vehicleConsumptionKmPerL', 'fuelPricePerLiter', 'fuelPriceSource', 'fuelPriceUpdatedAt', 'vehicleWearPerKm', 'defaultTollsEstimate', 'defaultParkingEstimate', 'defaultMealAllowance', 'chargeMealInBaseCity', 'paymentTerms', 'guestBrackets', 'cityRules', 'pricingFormula', 'eventStatuses', 'revenueCategories', 'expenseCategories', 'documentCategories', 'partnerCategories', 'authorizedUids', 'updatedBy', 'updatedAt'])
+        && data.companyName is string && data.companyName.size() >= 1 && data.companyName.size() <= 120
+        && data.baseAddress is string && data.baseAddress.size() >= 1 && data.baseAddress.size() <= 240
+        && data.baseCity is string && data.baseCity.size() >= 1 && data.baseCity.size() <= 100
+        && data.vehicleConsumptionKmPerL is number && data.vehicleConsumptionKmPerL > 0
+        && data.fuelPricePerLiter is number && data.fuelPricePerLiter >= 0
+        && (!('fuelPriceSource' in data) || (data.fuelPriceSource is string && data.fuelPriceSource.size() <= 160))
+        && (!('fuelPriceUpdatedAt' in data) || (data.fuelPriceUpdatedAt is string && data.fuelPriceUpdatedAt.size() <= 60))
+        && (!('vehicleWearPerKm' in data) || (data.vehicleWearPerKm is number && data.vehicleWearPerKm >= 0))
+        && (!('defaultTollsEstimate' in data) || (data.defaultTollsEstimate is number && data.defaultTollsEstimate >= 0))
+        && (!('defaultParkingEstimate' in data) || (data.defaultParkingEstimate is number && data.defaultParkingEstimate >= 0))
+        && (!('defaultMealAllowance' in data) || (data.defaultMealAllowance is number && data.defaultMealAllowance >= 0))
+        && (!('chargeMealInBaseCity' in data) || data.chargeMealInBaseCity is bool)
+        && data.paymentTerms is map
+        && data.guestBrackets is list && data.guestBrackets.size() <= 30
+        && data.cityRules is list && data.cityRules.size() <= 40
+        && (!('pricingFormula' in data) || data.pricingFormula is map)
+        && (!('eventStatuses' in data) || isValidStringList(data.eventStatuses, 20))
+        && (!('revenueCategories' in data) || isValidStringList(data.revenueCategories, 30))
+        && (!('expenseCategories' in data) || isValidStringList(data.expenseCategories, 30))
+        && (!('documentCategories' in data) || isValidStringList(data.documentCategories, 40))
+        && (!('partnerCategories' in data) || isValidStringList(data.partnerCategories, 40))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.updatedBy is string && data.updatedBy.size() <= 128
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFuelHistory(data) {
+      return data.keys().hasAll(['pricePerLiter', 'source', 'recordedBy', 'authorizedUids', 'createdAt'])
+        && data.keys().hasOnly(['pricePerLiter', 'source', 'notes', 'recordedBy', 'recordedByName', 'authorizedUids', 'createdAt'])
+        && data.pricePerLiter is number && data.pricePerLiter > 0
+        && data.source is string && data.source.size() <= 160
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300))
+        && data.recordedBy is string && isValidId(data.recordedBy)
+        && (!('recordedByName' in data) || (data.recordedByName is string && data.recordedByName.size() <= 120))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPackage(data) {
+      return data.keys().hasAll(['code', 'name', 'basePrice', 'estimatedCost', 'active', 'isOperational', 'sortOrder', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['code', 'name', 'description', 'basePrice', 'estimatedCost', 'active', 'isOperational', 'sortOrder', 'pricingRule', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.code is string && data.code.size() >= 1 && data.code.size() <= 40
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 100
+        && (!('description' in data) || (data.description is string && data.description.size() <= 600))
+        && data.basePrice is number && data.basePrice >= 0
+        && data.estimatedCost is number && data.estimatedCost >= 0
+        && data.active is bool
+        && data.isOperational is bool
+        && data.sortOrder is number
+        && (!('pricingRule' in data) || data.pricingRule is map)
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidActivity(data) {
+      return data.keys().hasAll(['name', 'category', 'defaultPrice', 'estimatedCost', 'billingType', 'packageIds', 'active', 'sortOrder', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'description', 'category', 'defaultPrice', 'estimatedCost', 'billingType', 'packageIds', 'active', 'sortOrder', 'rulesNotes', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 140
+        && (!('description' in data) || (data.description is string && data.description.size() <= 600))
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 80
+        && data.defaultPrice is number && data.defaultPrice >= 0
+        && data.estimatedCost is number && data.estimatedCost >= 0
+        && data.billingType in ['INCLUDED', 'ADDITIONAL', 'PER_GUEST']
+        && isValidStringList(data.packageIds, 20)
+        && data.active is bool
+        && data.sortOrder is number
+        && (!('rulesNotes' in data) || (data.rulesNotes is string && data.rulesNotes.size() <= 400))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCouple(data) {
+      return data.keys().hasAll(['coupleName', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['coupleName', 'phone', 'email', 'weddingDate', 'venue', 'city', 'notes', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.coupleName is string && data.coupleName.size() >= 1 && data.coupleName.size() <= 160
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 40))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 160))
+        && (!('weddingDate' in data) || (data.weddingDate is string && data.weddingDate.size() <= 30))
+        && (!('venue' in data) || (data.venue is string && data.venue.size() <= 180))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 100))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1500))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidQuote(data) {
+      return data.keys().hasAll(['code', 'coupleName', 'cityOption', 'guestBracketId', 'packageId', 'status', 'currentVersionNumber', 'selectedActivities', 'travelInput', 'adjustments', 'calculationSummary', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['code', 'coupleId', 'coupleName', 'phone', 'email', 'weddingDate', 'venue', 'cityOption', 'customCity', 'guestBracketId', 'guestBracketLabel', 'estimatedGuests', 'packageId', 'packageName', 'status', 'currentVersionNumber', 'selectedActivities', 'travelInput', 'adjustments', 'calculationSummary', 'observations', 'convertedEventId', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.code is string && data.code.size() >= 1 && data.code.size() <= 40
+        && (!('coupleId' in data) || (data.coupleId is string && data.coupleId.size() <= 128))
+        && data.coupleName is string && data.coupleName.size() >= 1 && data.coupleName.size() <= 160
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 40))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 160))
+        && (!('weddingDate' in data) || (data.weddingDate is string && data.weddingDate.size() <= 30))
+        && (!('venue' in data) || (data.venue is string && data.venue.size() <= 180))
+        && data.cityOption in ['Macaé', 'Rio das Ostras', 'Búzios', 'Outra localidade']
+        && (!('customCity' in data) || (data.customCity is string && data.customCity.size() <= 100))
+        && data.guestBracketId is string && data.guestBracketId.size() <= 60
+        && (!('guestBracketLabel' in data) || (data.guestBracketLabel is string && data.guestBracketLabel.size() <= 80))
+        && (!('estimatedGuests' in data) || (data.estimatedGuests is number && data.estimatedGuests >= 0))
+        && data.packageId is string && data.packageId.size() <= 128
+        && (!('packageName' in data) || (data.packageName is string && data.packageName.size() <= 100))
+        && data.status in ['EM_ELABORACAO', 'ENVIADO', 'EM_NEGOCIACAO', 'APROVADO', 'REJEITADO', 'EXPIRADO', 'ARQUIVADO']
+        && data.currentVersionNumber is number && data.currentVersionNumber >= 1
+        && data.selectedActivities is list && data.selectedActivities.size() <= 50
+        && data.travelInput is map
+        && data.adjustments is map
+        && data.calculationSummary is map
+        && (!('observations' in data) || (data.observations is string && data.observations.size() <= 2000))
+        && (!('convertedEventId' in data) || (data.convertedEventId is string && data.convertedEventId.size() <= 128))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidQuoteVersion(data, parentQuoteId) {
+      return data.keys().hasAll(['quoteId', 'versionNumber', 'snapshotConfig', 'selectedActivities', 'travelInput', 'adjustments', 'calculationSummary', 'createdBy', 'authorizedUids', 'createdAt'])
+        && data.keys().hasOnly(['quoteId', 'versionNumber', 'snapshotConfig', 'selectedActivities', 'travelInput', 'adjustments', 'calculationSummary', 'changeReason', 'createdBy', 'createdByName', 'authorizedUids', 'createdAt'])
+        && data.quoteId == parentQuoteId
+        && data.versionNumber is number && data.versionNumber >= 1
+        && data.snapshotConfig is map
+        && data.selectedActivities is list && data.selectedActivities.size() <= 50
+        && data.travelInput is map
+        && data.adjustments is map
+        && data.calculationSummary is map
+        && (!('changeReason' in data) || (data.changeReason is string && data.changeReason.size() <= 500))
+        && data.createdBy is string && isValidId(data.createdBy)
+        && (!('createdByName' in data) || (data.createdByName is string && data.createdByName.size() <= 120))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll(['code', 'coupleName', 'date', 'status', 'contractedValue', 'responsibleIds', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['code', 'coupleId', 'coupleName', 'quoteId', 'date', 'time', 'venue', 'city', 'guestCount', 'packageId', 'packageName', 'contractedValue', 'status', 'responsibleIds', 'responsibleNames', 'observations', 'conflictNote', 'postEventFeedback', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.code is string && data.code.size() >= 1 && data.code.size() <= 40
+        && (!('coupleId' in data) || (data.coupleId is string && data.coupleId.size() <= 128))
+        && data.coupleName is string && data.coupleName.size() >= 1 && data.coupleName.size() <= 160
+        && (!('quoteId' in data) || (data.quoteId is string && data.quoteId.size() <= 128))
+        && data.date is string && data.date.size() >= 1 && data.date.size() <= 30
+        && (!('time' in data) || (data.time is string && data.time.size() <= 20))
+        && (!('venue' in data) || (data.venue is string && data.venue.size() <= 180))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 100))
+        && (!('guestCount' in data) || (data.guestCount is number && data.guestCount >= 0))
+        && (!('packageId' in data) || (data.packageId is string && data.packageId.size() <= 128))
+        && (!('packageName' in data) || (data.packageName is string && data.packageName.size() <= 100))
+        && data.contractedValue is number && data.contractedValue >= 0
+        && data.status in ['LEAD', 'PRE_AGENDADO', 'CONTRATADO', 'EM_PLANEJAMENTO', 'EM_EXECUCAO', 'CONCLUIDO', 'CANCELADO']
+        && isValidStringList(data.responsibleIds, 10)
+        && (!('responsibleNames' in data) || isValidStringList(data.responsibleNames, 10))
+        && (!('observations' in data) || (data.observations is string && data.observations.size() <= 3000))
+        && (!('conflictNote' in data) || (data.conflictNote is string && data.conflictNote.size() <= 300))
+        && (!('postEventFeedback' in data) || data.postEventFeedback is map)
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidScheduleBlock(data) {
+      return data.keys().hasAll(['title', 'startDate', 'endDate', 'blockType', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'startDate', 'endDate', 'reason', 'notes', 'blockType', 'authorizedUids', 'createdBy', 'createdByName', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 140
+        && data.startDate is string && data.startDate.size() >= 8 && data.startDate.size() <= 30
+        && data.endDate is string && data.endDate.size() >= 8 && data.endDate.size() <= 30
+        && (!('reason' in data) || (data.reason is string && data.reason.size() <= 300))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && data.blockType in ['INDISPONIVEL', 'FERIADO', 'EVENTO_INTERNO', 'RESERVA']
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && (!('createdByName' in data) || (data.createdByName is string && data.createdByName.size() <= 120))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidEventTask(data, parentEventId) {
+      return data.keys().hasAll(['eventId', 'title', 'priority', 'status', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['eventId', 'title', 'description', 'assigneeId', 'assigneeName', 'dueDate', 'priority', 'status', 'notes', 'completedAt', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.eventId == parentEventId
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && (!('description' in data) || (data.description is string && data.description.size() <= 1000))
+        && (!('assigneeId' in data) || (data.assigneeId is string && data.assigneeId.size() <= 128))
+        && (!('assigneeName' in data) || (data.assigneeName is string && data.assigneeName.size() <= 120))
+        && (!('dueDate' in data) || (data.dueDate is string && data.dueDate.size() <= 30))
+        && data.priority in ['BAIXA', 'MEDIA', 'ALTA', 'URGENTE']
+        && data.status in ['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA']
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && (!('completedAt' in data) || (data.completedAt is string && data.completedAt.size() <= 40))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTimelineItem(data, parentEventId) {
+      return data.keys().hasAll(['eventId', 'timeSlot', 'activity', 'status', 'sortOrder', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['eventId', 'timeSlot', 'activity', 'responsible', 'notes', 'status', 'sortOrder', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.eventId == parentEventId
+        && data.timeSlot is string && data.timeSlot.size() >= 1 && data.timeSlot.size() <= 20
+        && data.activity is string && data.activity.size() >= 1 && data.activity.size() <= 200
+        && (!('responsible' in data) || (data.responsible is string && data.responsible.size() <= 120))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 600))
+        && data.status in ['PLANEJADO', 'EM_EXECUCAO', 'CONCLUIDO']
+        && data.sortOrder is number
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidContract(data) {
+      return data.keys().hasAll(['eventId', 'coupleName', 'contractedValue', 'depositPercent', 'depositAmount', 'installmentsCount', 'status', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['eventId', 'eventName', 'coupleName', 'quoteId', 'contractedValue', 'depositPercent', 'depositAmount', 'installmentsCount', 'paymentTermsNotes', 'status', 'observations', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.eventId is string && isValidId(data.eventId)
+        && (!('eventName' in data) || (data.eventName is string && data.eventName.size() <= 160))
+        && data.coupleName is string && data.coupleName.size() >= 1 && data.coupleName.size() <= 160
+        && (!('quoteId' in data) || (data.quoteId is string && data.quoteId.size() <= 128))
+        && data.contractedValue is number && data.contractedValue >= 0
+        && data.depositPercent is number && data.depositPercent >= 0 && data.depositPercent <= 100
+        && data.depositAmount is number && data.depositAmount >= 0
+        && data.installmentsCount is number && data.installmentsCount >= 1
+        && (!('paymentTermsNotes' in data) || (data.paymentTermsNotes is string && data.paymentTermsNotes.size() <= 500))
+        && data.status in ['ATIVO', 'QUITADO', 'CANCELADO']
+        && (!('observations' in data) || (data.observations is string && data.observations.size() <= 1000))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidInstallment(data) {
+      return data.keys().hasAll(['contractId', 'eventId', 'number', 'label', 'dueDate', 'amount', 'paidAmount', 'status', 'paymentHistory', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['contractId', 'eventId', 'eventName', 'number', 'label', 'dueDate', 'amount', 'paidAmount', 'status', 'paymentMethod', 'paidAt', 'notes', 'paymentHistory', 'pendingPayments', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.contractId is string && isValidId(data.contractId)
+        && data.eventId is string && isValidId(data.eventId)
+        && (!('eventName' in data) || (data.eventName is string && data.eventName.size() <= 160))
+        && data.number is number && data.number >= 0
+        && data.label is string && data.label.size() >= 1 && data.label.size() <= 100
+        && data.dueDate is string && data.dueDate.size() >= 1 && data.dueDate.size() <= 30
+        && data.amount is number && data.amount >= 0
+        && data.paidAmount is number && data.paidAmount >= 0
+        && data.status in ['PENDENTE', 'PARCIAL', 'PAGO', 'ATRASADO']
+        && (!('paymentMethod' in data) || (data.paymentMethod is string && data.paymentMethod.size() <= 60))
+        && (!('paidAt' in data) || (data.paidAt is string && data.paidAt.size() <= 40))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && data.paymentHistory is list && data.paymentHistory.size() <= 50
+        && (!('pendingPayments' in data) || (data.pendingPayments is list && data.pendingPayments.size() <= 30))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidReceipt(data) {
+      return data.keys().hasAll(['receiptNumber', 'installmentId', 'contractId', 'eventId', 'coupleName', 'amount', 'receivedAt', 'paymentMethod', 'emittedBy', 'authorizedUids', 'createdAt'])
+        && data.keys().hasOnly(['receiptNumber', 'installmentId', 'contractId', 'eventId', 'coupleName', 'eventName', 'eventDate', 'amount', 'receivedAt', 'paymentMethod', 'installmentLabel', 'contractedValue', 'totalPaid', 'remainingBalance', 'paymentId', 'notes', 'fileName', 'storagePath', 'downloadUrl', 'documentId', 'emittedBy', 'emittedByName', 'authorizedUids', 'createdAt'])
+        && data.receiptNumber is string && data.receiptNumber.size() >= 1 && data.receiptNumber.size() <= 60
+        && data.installmentId is string && data.installmentId.size() <= 128
+        && data.contractId is string && data.contractId.size() <= 128
+        && data.eventId is string && data.eventId.size() <= 128
+        && data.coupleName is string && data.coupleName.size() >= 1 && data.coupleName.size() <= 160
+        && (!('eventName' in data) || (data.eventName is string && data.eventName.size() <= 160))
+        && (!('eventDate' in data) || (data.eventDate is string && data.eventDate.size() <= 30))
+        && data.amount is number && data.amount >= 0
+        && data.receivedAt is string && data.receivedAt.size() >= 1 && data.receivedAt.size() <= 30
+        && data.paymentMethod is string && data.paymentMethod.size() >= 1 && data.paymentMethod.size() <= 60
+        && (!('installmentLabel' in data) || (data.installmentLabel is string && data.installmentLabel.size() <= 100))
+        && (!('contractedValue' in data) || (data.contractedValue is number && data.contractedValue >= 0))
+        && (!('totalPaid' in data) || (data.totalPaid is number && data.totalPaid >= 0))
+        && (!('remainingBalance' in data) || (data.remainingBalance is number && data.remainingBalance >= 0))
+        && (!('paymentId' in data) || (data.paymentId is string && data.paymentId.size() <= 128))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 200))
+        && (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() <= 400))
+        && (!('downloadUrl' in data) || (data.downloadUrl is string && data.downloadUrl.size() <= 1000))
+        && (!('documentId' in data) || (data.documentId is string && data.documentId.size() <= 128))
+        && data.emittedBy is string && isValidId(data.emittedBy)
+        && (!('emittedByName' in data) || (data.emittedByName is string && data.emittedByName.size() <= 120))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidExpense(data) {
+      return data.keys().hasAll(['name', 'type', 'category', 'amount', 'date', 'status', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'type', 'category', 'amount', 'date', 'eventId', 'eventName', 'responsibleId', 'responsibleName', 'status', 'notes', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.type in ['FIXA', 'VARIAVEL', 'EVENTO', 'GERAL']
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 80
+        && data.amount is number && data.amount >= 0
+        && data.date is string && data.date.size() >= 1 && data.date.size() <= 30
+        && (!('eventId' in data) || (data.eventId is string && data.eventId.size() <= 128))
+        && (!('eventName' in data) || (data.eventName is string && data.eventName.size() <= 160))
+        && (!('responsibleId' in data) || (data.responsibleId is string && data.responsibleId.size() <= 128))
+        && (!('responsibleName' in data) || (data.responsibleName is string && data.responsibleName.size() <= 120))
+        && data.status in ['PENDENTE', 'PAGO']
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTeamMember(data) {
+      return data.keys().hasAll(['name', 'roleTitle', 'profileRole', 'status', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'name', 'roleTitle', 'profileRole', 'classification', 'status', 'email', 'phone', 'photoUrl', 'photoStoragePath', 'linkedEventIds', 'responsibilities', 'notes', 'remunerationPerEvent', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && (!('userId' in data) || (data.userId is string && data.userId.size() <= 128))
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.roleTitle is string && data.roleTitle.size() >= 1 && data.roleTitle.size() <= 100
+        && data.profileRole in ['MASTER_ADMIN', 'OPERATIONAL_ADMIN', 'MEMBER', 'VIEWER']
+        && (!('classification' in data) || data.classification in ['PERMANENTE', 'SITUACIONAL'])
+        && data.status in ['ATIVO', 'INATIVO']
+        && (!('email' in data) || (data.email is string && data.email.size() <= 160))
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 40))
+        && (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 400000))
+        && (!('photoStoragePath' in data) || (data.photoStoragePath is string && data.photoStoragePath.size() <= 400))
+        && (!('linkedEventIds' in data) || isValidStringList(data.linkedEventIds, 40))
+        && (!('responsibilities' in data) || (data.responsibilities is string && data.responsibilities.size() <= 1000))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && (!('remunerationPerEvent' in data) || (data.remunerationPerEvent is number && data.remunerationPerEvent >= 0))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPartner(data) {
+      return data.keys().hasAll(['name', 'category', 'rating', 'active', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'category', 'city', 'phone', 'email', 'instagram', 'website', 'rating', 'notes', 'logoUrl', 'logoStoragePath', 'active', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 140
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 80
+        && (!('city' in data) || (data.city is string && data.city.size() <= 100))
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 40))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 160))
+        && (!('instagram' in data) || (data.instagram is string && data.instagram.size() <= 120))
+        && (!('website' in data) || (data.website is string && data.website.size() <= 240))
+        && data.rating is number && data.rating >= 0 && data.rating <= 5
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1500))
+        && (!('logoUrl' in data) || (data.logoUrl is string && data.logoUrl.size() <= 400000))
+        && (!('logoStoragePath' in data) || (data.logoStoragePath is string && data.logoStoragePath.size() <= 400))
+        && data.active is bool
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDocumentFolder(data) {
+      return data.keys().hasAll(['name', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'parentId', 'description', 'authorizedUids', 'createdBy', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && (!('parentId' in data) || (data.parentId is string && data.parentId.size() <= 128))
+        && (!('description' in data) || (data.description is string && data.description.size() <= 300))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdBy is string && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidDocumentRecord(data) {
+      return data.keys().hasAll(['title', 'category', 'storageMode', 'uploadedBy', 'authorizedUids', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'category', 'folderId', 'fileName', 'mimeType', 'fileSize', 'storagePath', 'downloadUrl', 'storageMode', 'isTemplate', 'eventId', 'eventName', 'coupleId', 'coupleName', 'contractId', 'partnerId', 'partnerName', 'memberId', 'memberName', 'quoteId', 'paymentId', 'notes', 'uploadedBy', 'uploadedByName', 'authorizedUids', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 80
+        && (!('folderId' in data) || (data.folderId is string && data.folderId.size() <= 128))
+        && (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 200))
+        && (!('mimeType' in data) || (data.mimeType is string && data.mimeType.size() <= 120))
+        && (!('fileSize' in data) || (data.fileSize is number && data.fileSize >= 0))
+        && (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() <= 400))
+        && (!('downloadUrl' in data) || (data.downloadUrl is string && data.downloadUrl.size() <= 1000))
+        && data.storageMode in ['FIREBASE_STORAGE', 'METADATA_ONLY']
+        && (!('isTemplate' in data) || data.isTemplate is bool)
+        && (!('eventId' in data) || (data.eventId is string && data.eventId.size() <= 128))
+        && (!('eventName' in data) || (data.eventName is string && data.eventName.size() <= 160))
+        && (!('coupleId' in data) || (data.coupleId is string && data.coupleId.size() <= 128))
+        && (!('coupleName' in data) || (data.coupleName is string && data.coupleName.size() <= 160))
+        && (!('contractId' in data) || (data.contractId is string && data.contractId.size() <= 128))
+        && (!('partnerId' in data) || (data.partnerId is string && data.partnerId.size() <= 128))
+        && (!('partnerName' in data) || (data.partnerName is string && data.partnerName.size() <= 160))
+        && (!('memberId' in data) || (data.memberId is string && data.memberId.size() <= 128))
+        && (!('memberName' in data) || (data.memberName is string && data.memberName.size() <= 160))
+        && (!('quoteId' in data) || (data.quoteId is string && data.quoteId.size() <= 128))
+        && (!('paymentId' in data) || (data.paymentId is string && data.paymentId.size() <= 128))
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && data.uploadedBy is string && isValidId(data.uploadedBy)
+        && (!('uploadedByName' in data) || (data.uploadedByName is string && data.uploadedByName.size() <= 120))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPdfTemplate(data) {
+      return data.keys().hasAll(['name', 'version', 'fileName', 'storageMode', 'isActive', 'fieldMappings', 'uploadedBy', 'authorizedUids', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['name', 'version', 'fileName', 'storagePath', 'downloadUrl', 'storageMode', 'baseDataUrl', 'isActive', 'isSystemDefault', 'fieldMappings', 'notes', 'uploadedBy', 'uploadedByName', 'authorizedUids', 'createdAt', 'updatedAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 160
+        && data.version is string && data.version.size() >= 1 && data.version.size() <= 40
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 200
+        && (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() <= 400))
+        && (!('downloadUrl' in data) || (data.downloadUrl is string && data.downloadUrl.size() <= 1000))
+        && data.storageMode in ['FIREBASE_STORAGE', 'REFERENCE_ASSET', 'INLINE_BASE64']
+        && (!('baseDataUrl' in data) || (data.baseDataUrl is string && data.baseDataUrl.size() <= 900000))
+        && data.isActive is bool
+        && (!('isSystemDefault' in data) || data.isSystemDefault is bool)
+        && data.fieldMappings is list && data.fieldMappings.size() <= 30
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 1000))
+        && data.uploadedBy is string && isValidId(data.uploadedBy)
+        && (!('uploadedByName' in data) || (data.uploadedByName is string && data.uploadedByName.size() <= 120))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidQuoteEmission(data) {
+      return data.keys().hasAll(['quoteCode', 'coupleName', 'templateName', 'fileName', 'storageMode', 'emittedBy', 'authorizedUids', 'createdAt'])
+        && data.keys().hasOnly(['quoteId', 'quoteCode', 'coupleName', 'templateId', 'templateName', 'templateVersion', 'fileName', 'storagePath', 'downloadUrl', 'storageMode', 'documentId', 'emittedBy', 'emittedByName', 'authorizedUids', 'createdAt'])
+        && (!('quoteId' in data) || (data.quoteId is string && data.quoteId.size() <= 128))
+        && data.quoteCode is string && data.quoteCode.size() >= 1 && data.quoteCode.size() <= 60
+        && data.coupleName is string && data.coupleName.size() >= 1 && data.coupleName.size() <= 160
+        && (!('templateId' in data) || (data.templateId is string && data.templateId.size() <= 128))
+        && data.templateName is string && data.templateName.size() >= 1 && data.templateName.size() <= 160
+        && (!('templateVersion' in data) || (data.templateVersion is string && data.templateVersion.size() <= 40))
+        && data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 200
+        && (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() <= 400))
+        && (!('downloadUrl' in data) || (data.downloadUrl is string && data.downloadUrl.size() <= 1000))
+        && data.storageMode in ['FIREBASE_STORAGE', 'GENERATED_ON_DEMAND']
+        && (!('documentId' in data) || (data.documentId is string && data.documentId.size() <= 128))
+        && data.emittedBy is string && isValidId(data.emittedBy)
+        && (!('emittedByName' in data) || (data.emittedByName is string && data.emittedByName.size() <= 120))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['userId', 'userName', 'action', 'entityType', 'entityId', 'authorizedUids', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'userName', 'action', 'entityType', 'entityId', 'entityLabel', 'previousValueSummary', 'newValueSummary', 'authorizedUids', 'createdAt'])
+        && data.userId is string && isValidId(data.userId)
+        && data.userName is string && data.userName.size() >= 1 && data.userName.size() <= 120
+        && data.action is string && data.action.size() >= 1 && data.action.size() <= 80
+        && data.entityType is string && data.entityType.size() >= 1 && data.entityType.size() <= 60
+        && data.entityId is string && data.entityId.size() >= 1 && data.entityId.size() <= 128
+        && (!('entityLabel' in data) || (data.entityLabel is string && data.entityLabel.size() <= 200))
+        && (!('previousValueSummary' in data) || (data.previousValueSummary is string && data.previousValueSummary.size() <= 1000))
+        && (!('newValueSummary' in data) || (data.newValueSummary is string && data.newValueSummary.size() <= 1000))
+        && isValidAuthorizedUids(data.authorizedUids)
+        && data.createdAt is timestamp;
+    }
+
+    // =========================================================================
+    // COLLECTION MATCH RULES
+    // =========================================================================
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isVerified() && (request.auth.uid == userId || isOpOrMasterAdmin());
+      allow list: if isVerified() && (isBootstrapAdmin() || resource.data.uid == request.auth.uid || request.auth.uid in resource.data.authorizedUids);
+
+      allow create: if isValidId(userId) && isVerified()
+        && request.auth.uid == userId
+        && isValidUser(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          (isBootstrapAdmin() && incoming().role == 'MASTER_ADMIN' && incoming().status == 'ACTIVE') ||
+          (
+            exists(/databases/$(database)/documents/invites/$(request.auth.token.email))
+            && get(/databases/$(database)/documents/invites/$(request.auth.token.email)).data.status == 'PENDING'
+            && incoming().role == get(/databases/$(database)/documents/invites/$(request.auth.token.email)).data.role
+            && incoming().email == request.auth.token.email
+            && incoming().status == 'ACTIVE'
+          )
+        );
+
+      allow update: if isValidId(userId) && isVerified()
+        && isValidUser(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isMasterAdmin() ||
+          (
+            request.auth.uid == userId
+            && incoming().role == existing().role
+            && incoming().status == existing().status
+            && incoming().permissions == existing().permissions
+            && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'lastLoginAt', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(userId) && isMasterAdmin() && request.auth.uid != userId;
+    }
+
+    match /invites/{inviteId} {
+      allow get: if isValidEmailId(inviteId) && isVerified() && (isMasterAdmin() || inviteId == request.auth.token.email);
+      allow list: if isVerified() && (isBootstrapAdmin() || resource.data.email == request.auth.token.email || request.auth.uid in resource.data.authorizedUids);
+
+      allow create: if isValidEmailId(inviteId) && isMasterAdmin()
+        && isValidInvite(incoming())
+        && incoming().email == inviteId
+        && incoming().invitedBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidEmailId(inviteId) && isVerified()
+        && isValidInvite(incoming())
+        && incoming().invitedBy == existing().invitedBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isMasterAdmin() ||
+          (
+            inviteId == request.auth.token.email
+            && existing().status == 'PENDING'
+            && incoming().status == 'ACCEPTED'
+            && incoming().role == existing().role
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidEmailId(inviteId) && isMasterAdmin();
+    }
+
+    match /systemConfig/{configId} {
+      allow get: if isValidId(configId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(configId) && isMasterAdmin()
+        && isValidSystemConfig(incoming())
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(configId) && isMasterAdmin()
+        && isValidSystemConfig(incoming())
+        && incoming().updatedBy == request.auth.uid
+        && incoming().updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
+    match /fuelHistory/{entryId} {
+      allow get: if isValidId(entryId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(entryId) && isMasterAdmin()
+        && isValidFuelHistory(incoming())
+        && incoming().recordedBy == request.auth.uid
+        && incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /packages/{packageId} {
+      allow get: if isValidId(packageId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(packageId) && isMasterAdmin()
+        && isValidPackage(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(packageId) && isMasterAdmin()
+        && isValidPackage(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(packageId) && isMasterAdmin();
+    }
+
+    match /activities/{activityId} {
+      allow get: if isValidId(activityId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(activityId) && isMasterAdmin()
+        && isValidActivity(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(activityId) && isMasterAdmin()
+        && isValidActivity(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(activityId) && isMasterAdmin();
+    }
+
+    match /couples/{coupleId} {
+      allow get: if isValidId(coupleId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(coupleId) && canWriteOperational()
+        && isValidCouple(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(coupleId) && canWriteOperational()
+        && isValidCouple(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(coupleId) && isOpOrMasterAdmin();
+    }
+
+    match /quotes/{quoteId} {
+      allow get: if isValidId(quoteId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(quoteId) && canWriteOperational()
+        && isValidQuote(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(quoteId) && canWriteOperational()
+        && isValidQuote(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isMasterAdmin() ||
+          existing().status != 'APROVADO' ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['convertedEventId', 'status', 'observations', 'updatedAt', 'authorizedUids'])
+        );
+
+      allow delete: if isValidId(quoteId) && isMasterAdmin();
+
+      match /versions/{versionId} {
+        allow get: if isValidId(quoteId) && isValidId(versionId) && isActiveUser()
+          && exists(/databases/$(database)/documents/quotes/$(quoteId));
+        allow list: if isTeamInResource(resource.data);
+
+        allow create: if isValidId(quoteId) && isValidId(versionId) && canWriteOperational()
+          && exists(/databases/$(database)/documents/quotes/$(quoteId))
+          && isValidQuoteVersion(incoming(), quoteId)
+          && incoming().createdBy == request.auth.uid
+          && incoming().createdAt == request.time;
+
+        allow update, delete: if false;
+      }
+    }
+
+    match /events/{eventId} {
+      allow get: if isValidId(eventId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(eventId) && canWriteOperational()
+        && isValidEvent(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(eventId) && canWriteOperational()
+        && isValidEvent(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isMasterAdmin() ||
+          (existing().status != 'CANCELADO' && existing().status != 'CONCLUIDO') ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['postEventFeedback', 'observations', 'updatedAt', 'authorizedUids'])
+        );
+
+      allow delete: if isValidId(eventId) && isMasterAdmin();
+
+      match /tasks/{taskId} {
+        allow get: if isValidId(eventId) && isValidId(taskId) && isActiveUser()
+          && exists(/databases/$(database)/documents/events/$(eventId));
+        allow list: if isTeamInResource(resource.data);
+
+        allow create: if isValidId(eventId) && isValidId(taskId) && canWriteOperational()
+          && exists(/databases/$(database)/documents/events/$(eventId))
+          && isValidEventTask(incoming(), eventId)
+          && incoming().createdBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+
+        allow update: if isValidId(eventId) && isValidId(taskId) && canWriteOperational()
+          && exists(/databases/$(database)/documents/events/$(eventId))
+          && isValidEventTask(incoming(), eventId)
+          && incoming().eventId == existing().eventId
+          && incoming().createdBy == existing().createdBy
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time;
+
+        allow delete: if isValidId(eventId) && isValidId(taskId) && canWriteOperational()
+          && exists(/databases/$(database)/documents/events/$(eventId));
+      }
+
+      match /timeline/{itemId} {
+        allow get: if isValidId(eventId) && isValidId(itemId) && isActiveUser()
+          && exists(/databases/$(database)/documents/events/$(eventId));
+        allow list: if isTeamInResource(resource.data);
+
+        allow create: if isValidId(eventId) && isValidId(itemId) && canWriteOperational()
+          && exists(/databases/$(database)/documents/events/$(eventId))
+          && isValidTimelineItem(incoming(), eventId)
+          && incoming().createdBy == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+
+        allow update: if isValidId(eventId) && isValidId(itemId) && canWriteOperational()
+          && exists(/databases/$(database)/documents/events/$(eventId))
+          && isValidTimelineItem(incoming(), eventId)
+          && incoming().eventId == existing().eventId
+          && incoming().createdBy == existing().createdBy
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time;
+
+        allow delete: if isValidId(eventId) && isValidId(itemId) && canWriteOperational()
+          && exists(/databases/$(database)/documents/events/$(eventId));
+      }
+    }
+
+    match /scheduleBlocks/{blockId} {
+      allow get: if isValidId(blockId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(blockId) && canWriteOperational()
+        && isValidScheduleBlock(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(blockId) && canWriteOperational()
+        && isValidScheduleBlock(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(blockId) && isOpOrMasterAdmin();
+    }
+
+    match /contracts/{contractId} {
+      allow get: if isValidId(contractId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(contractId) && canWriteOperational()
+        && isValidContract(incoming())
+        && exists(/databases/$(database)/documents/events/$(incoming().eventId))
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(contractId) && canWriteOperational()
+        && isValidContract(incoming())
+        && incoming().eventId == existing().eventId
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(contractId) && isMasterAdmin();
+    }
+
+    match /installments/{installmentId} {
+      allow get: if isValidId(installmentId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(installmentId) && canWriteOperational()
+        && isValidInstallment(incoming())
+        && exists(/databases/$(database)/documents/contracts/$(incoming().contractId))
+        && exists(/databases/$(database)/documents/events/$(incoming().eventId))
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(installmentId) && canWriteOperational()
+        && isValidInstallment(incoming())
+        && incoming().contractId == existing().contractId
+        && incoming().eventId == existing().eventId
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(installmentId) && isOpOrMasterAdmin();
+    }
+
+    match /receipts/{receiptId} {
+      allow get: if isValidId(receiptId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(receiptId) && canWriteOperational()
+        && isValidReceipt(incoming())
+        && incoming().emittedBy == request.auth.uid
+        && incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /expenses/{expenseId} {
+      allow get: if isValidId(expenseId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(expenseId) && canWriteOperational()
+        && isValidExpense(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(expenseId) && canWriteOperational()
+        && isValidExpense(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(expenseId) && isOpOrMasterAdmin();
+    }
+
+    match /teamMembers/{memberId} {
+      allow get: if isValidId(memberId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(memberId) && isOpOrMasterAdmin()
+        && isValidTeamMember(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(memberId) && isOpOrMasterAdmin()
+        && isValidTeamMember(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(memberId) && isMasterAdmin();
+    }
+
+    match /partners/{partnerId} {
+      allow get: if isValidId(partnerId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(partnerId) && canWriteOperational()
+        && isValidPartner(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(partnerId) && canWriteOperational()
+        && isValidPartner(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(partnerId) && isOpOrMasterAdmin();
+    }
+
+    match /documentFolders/{folderId} {
+      allow get: if isValidId(folderId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(folderId) && canWriteOperational()
+        && isValidDocumentFolder(incoming())
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(folderId) && canWriteOperational()
+        && isValidDocumentFolder(incoming())
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(folderId) && isOpOrMasterAdmin();
+    }
+
+    match /documents/{documentId} {
+      allow get: if isValidId(documentId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(documentId) && canWriteOperational()
+        && isValidDocumentRecord(incoming())
+        && incoming().uploadedBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(documentId) && canWriteOperational()
+        && isValidDocumentRecord(incoming())
+        && incoming().uploadedBy == existing().uploadedBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(documentId) && isOpOrMasterAdmin();
+    }
+
+    match /pdfTemplates/{templateId} {
+      allow get: if isValidId(templateId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(templateId) && isMasterAdmin()
+        && isValidPdfTemplate(incoming())
+        && incoming().uploadedBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(templateId) && isMasterAdmin()
+        && isValidPdfTemplate(incoming())
+        && incoming().uploadedBy == existing().uploadedBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time;
+
+      allow delete: if isValidId(templateId) && isMasterAdmin();
+    }
+
+    match /quoteEmissions/{emissionId} {
+      allow get: if isValidId(emissionId) && isActiveUser();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(emissionId) && canWriteOperational()
+        && isValidQuoteEmission(incoming())
+        && incoming().emittedBy == request.auth.uid
+        && incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow get: if isValidId(logId) && isOpOrMasterAdmin();
+      allow list: if isTeamInResource(resource.data);
+
+      allow create: if isValidId(logId) && isActiveUser()
+        && isValidAuditLog(incoming())
+        && incoming().userId == request.auth.uid
+        && incoming().createdAt == request.time;
+
+      allow update, delete: if false;
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "4EVER Management",
+  "description": "Plataforma interna de gestão operacional, comercial e financeira para a 4EVER Assessoria e Cerimonial.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

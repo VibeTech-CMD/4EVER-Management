@@ -1,0 +1,661 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Usuário autenticado do sistema 4EVER Management com perfil RBAC e permissões.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "role": { "type": "string", "enum": ["MASTER_ADMIN", "OPERATIONAL_ADMIN", "MEMBER", "VIEWER"] },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE"] },
+        "roleTitle": { "type": "string", "maxLength": 100 },
+        "permissions": { "type": "object" },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "status", "permissions", "authorizedUids", "createdAt", "updatedAt"]
+    },
+    "Invite": {
+      "title": "Invite",
+      "description": "Pré-cadastro e convite de integrante da equipe por e-mail.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email", "maxLength": 160 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["OPERATIONAL_ADMIN", "MEMBER", "VIEWER"] },
+        "roleTitle": { "type": "string", "maxLength": 100 },
+        "permissions": { "type": "object" },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "REVOKED"] },
+        "invitedBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "name", "role", "status", "invitedBy", "authorizedUids", "createdAt", "updatedAt"]
+    },
+    "SystemConfig": {
+      "title": "SystemConfig",
+      "description": "Configuração geral persistente de precificação, deslocamento, categorias e financeiro.",
+      "type": "object",
+      "properties": {
+        "companyName": { "type": "string", "maxLength": 120 },
+        "baseAddress": { "type": "string", "maxLength": 240 },
+        "baseCity": { "type": "string", "maxLength": 100 },
+        "vehicleConsumptionKmPerL": { "type": "number" },
+        "fuelPricePerLiter": { "type": "number" },
+        "fuelPriceSource": { "type": "string", "maxLength": 160 },
+        "fuelPriceUpdatedAt": { "type": "string", "maxLength": 60 },
+        "vehicleWearPerKm": { "type": "number" },
+        "defaultTollsEstimate": { "type": "number" },
+        "defaultParkingEstimate": { "type": "number" },
+        "defaultMealAllowance": { "type": "number" },
+        "chargeMealInBaseCity": { "type": "boolean" },
+        "paymentTerms": { "type": "object" },
+        "guestBrackets": { "type": "array" },
+        "cityRules": { "type": "array" },
+        "pricingFormula": { "type": "object" },
+        "eventStatuses": { "type": "array" },
+        "revenueCategories": { "type": "array" },
+        "expenseCategories": { "type": "array" },
+        "documentCategories": { "type": "array" },
+        "partnerCategories": { "type": "array" },
+        "authorizedUids": { "type": "array" },
+        "updatedBy": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyName", "baseAddress", "baseCity", "vehicleConsumptionKmPerL", "fuelPricePerLiter", "paymentTerms", "guestBrackets", "cityRules", "authorizedUids", "updatedBy", "updatedAt"]
+    },
+    "FuelHistoryEntry": {
+      "title": "FuelHistoryEntry",
+      "description": "Registro histórico de atualização do preço do combustível.",
+      "type": "object",
+      "properties": {
+        "pricePerLiter": { "type": "number" },
+        "source": { "type": "string", "maxLength": 160 },
+        "notes": { "type": "string", "maxLength": 300 },
+        "recordedBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "recordedByName": { "type": "string", "maxLength": 120 },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pricePerLiter", "source", "recordedBy", "authorizedUids", "createdAt"]
+    },
+    "Package": {
+      "title": "Package",
+      "description": "Pacote comercial configurável (Love, Forever e estrutura futura).",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 40, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+        "description": { "type": "string", "maxLength": 600 },
+        "basePrice": { "type": "number" },
+        "estimatedCost": { "type": "number" },
+        "active": { "type": "boolean" },
+        "isOperational": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "pricingRule": { "type": "object" },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "name", "basePrice", "estimatedCost", "active", "isOperational", "sortOrder", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Activity": {
+      "title": "Activity",
+      "description": "Atividade ou entregável vinculável a pacotes e orçamentos.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "description": { "type": "string", "maxLength": 600 },
+        "category": { "type": "string", "maxLength": 80 },
+        "defaultPrice": { "type": "number" },
+        "estimatedCost": { "type": "number" },
+        "billingType": { "type": "string", "enum": ["INCLUDED", "ADDITIONAL", "PER_GUEST"] },
+        "packageIds": { "type": "array" },
+        "active": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "rulesNotes": { "type": "string", "maxLength": 400 },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "category", "defaultPrice", "estimatedCost", "billingType", "packageIds", "active", "sortOrder", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Couple": {
+      "title": "Couple",
+      "description": "Cadastro de casal/cliente atendido pela 4EVER.",
+      "type": "object",
+      "properties": {
+        "coupleName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 160 },
+        "weddingDate": { "type": "string", "maxLength": 30 },
+        "venue": { "type": "string", "maxLength": 180 },
+        "city": { "type": "string", "maxLength": 100 },
+        "notes": { "type": "string", "maxLength": 1500 },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["coupleName", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Quote": {
+      "title": "Quote",
+      "description": "Orçamento comercial gerado no Simulador 4EVER com cálculo dinâmico e vínculo de casal.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 40 },
+        "coupleId": { "type": "string", "maxLength": 128 },
+        "coupleName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 160 },
+        "weddingDate": { "type": "string", "maxLength": 30 },
+        "venue": { "type": "string", "maxLength": 180 },
+        "cityOption": { "type": "string", "enum": ["Macaé", "Rio das Ostras", "Búzios", "Outra localidade"] },
+        "customCity": { "type": "string", "maxLength": 100 },
+        "guestBracketId": { "type": "string", "maxLength": 60 },
+        "guestBracketLabel": { "type": "string", "maxLength": 80 },
+        "estimatedGuests": { "type": "number" },
+        "packageId": { "type": "string", "maxLength": 128 },
+        "packageName": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["EM_ELABORACAO", "ENVIADO", "EM_NEGOCIACAO", "APROVADO", "REJEITADO", "EXPIRADO", "ARQUIVADO"] },
+        "currentVersionNumber": { "type": "number" },
+        "selectedActivities": { "type": "array" },
+        "travelInput": { "type": "object" },
+        "adjustments": { "type": "object" },
+        "calculationSummary": { "type": "object" },
+        "observations": { "type": "string", "maxLength": 2000 },
+        "convertedEventId": { "type": "string", "maxLength": 128 },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "coupleName", "cityOption", "guestBracketId", "packageId", "status", "currentVersionNumber", "selectedActivities", "travelInput", "adjustments", "calculationSummary", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "QuoteVersion": {
+      "title": "QuoteVersion",
+      "description": "Snapshot imutável de versão de orçamento preservando parâmetros históricos.",
+      "type": "object",
+      "properties": {
+        "quoteId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "versionNumber": { "type": "number" },
+        "snapshotConfig": { "type": "object" },
+        "selectedActivities": { "type": "array" },
+        "travelInput": { "type": "object" },
+        "adjustments": { "type": "object" },
+        "calculationSummary": { "type": "object" },
+        "changeReason": { "type": "string", "maxLength": 500 },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdByName": { "type": "string", "maxLength": 120 },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["quoteId", "versionNumber", "snapshotConfig", "selectedActivities", "travelInput", "adjustments", "calculationSummary", "createdBy", "authorizedUids", "createdAt"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "Evento/Casamento gerenciado pela equipe 4EVER com ficha completa.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "maxLength": 40 },
+        "coupleId": { "type": "string", "maxLength": 128 },
+        "coupleName": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "quoteId": { "type": "string", "maxLength": 128 },
+        "date": { "type": "string", "maxLength": 30 },
+        "time": { "type": "string", "maxLength": 20 },
+        "venue": { "type": "string", "maxLength": 180 },
+        "city": { "type": "string", "maxLength": 100 },
+        "guestCount": { "type": "number" },
+        "packageId": { "type": "string", "maxLength": 128 },
+        "packageName": { "type": "string", "maxLength": 100 },
+        "contractedValue": { "type": "number" },
+        "status": { "type": "string", "enum": ["LEAD", "PRE_AGENDADO", "CONTRATADO", "EM_PLANEJAMENTO", "EM_EXECUCAO", "CONCLUIDO", "CANCELADO"] },
+        "responsibleIds": { "type": "array" },
+        "responsibleNames": { "type": "array" },
+        "observations": { "type": "string", "maxLength": 3000 },
+        "conflictNote": { "type": "string", "maxLength": 300 },
+        "postEventFeedback": { "type": "object" },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "coupleName", "date", "status", "contractedValue", "responsibleIds", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "ScheduleBlock": {
+      "title": "ScheduleBlock",
+      "description": "Bloqueio de data ou período no calendário operacional 4EVER.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "startDate": { "type": "string", "maxLength": 30 },
+        "endDate": { "type": "string", "maxLength": 30 },
+        "reason": { "type": "string", "maxLength": 300 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "blockType": { "type": "string", "enum": ["INDISPONIVEL", "FERIADO", "EVENTO_INTERNO", "RESERVA"] },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdByName": { "type": "string", "maxLength": 120 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "startDate", "endDate", "blockType", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "EventTask": {
+      "title": "EventTask",
+      "description": "Tarefa de checklist vinculada a um evento.",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "assigneeId": { "type": "string", "maxLength": 128 },
+        "assigneeName": { "type": "string", "maxLength": 120 },
+        "dueDate": { "type": "string", "maxLength": 30 },
+        "priority": { "type": "string", "enum": ["BAIXA", "MEDIA", "ALTA", "URGENTE"] },
+        "status": { "type": "string", "enum": ["PENDENTE", "EM_ANDAMENTO", "CONCLUIDA"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "completedAt": { "type": "string", "maxLength": 40 },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["eventId", "title", "priority", "status", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "EventTimelineItem": {
+      "title": "EventTimelineItem",
+      "description": "Item de cronograma do dia do casamento.",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "timeSlot": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "activity": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "responsible": { "type": "string", "maxLength": 120 },
+        "notes": { "type": "string", "maxLength": 600 },
+        "status": { "type": "string", "enum": ["PLANEJADO", "EM_EXECUCAO", "CONCLUIDO"] },
+        "sortOrder": { "type": "number" },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["eventId", "timeSlot", "activity", "status", "sortOrder", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Contract": {
+      "title": "Contract",
+      "description": "Contrato financeiro vinculado a um evento.",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventName": { "type": "string", "maxLength": 160 },
+        "coupleName": { "type": "string", "maxLength": 160 },
+        "quoteId": { "type": "string", "maxLength": 128 },
+        "contractedValue": { "type": "number" },
+        "depositPercent": { "type": "number" },
+        "depositAmount": { "type": "number" },
+        "installmentsCount": { "type": "number" },
+        "paymentTermsNotes": { "type": "string", "maxLength": 500 },
+        "status": { "type": "string", "enum": ["ATIVO", "QUITADO", "CANCELADO"] },
+        "observations": { "type": "string", "maxLength": 1000 },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["eventId", "coupleName", "contractedValue", "depositPercent", "depositAmount", "installmentsCount", "status", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Installment": {
+      "title": "Installment",
+      "description": "Parcela de receita vinculada a contrato e evento.",
+      "type": "object",
+      "properties": {
+        "contractId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "eventName": { "type": "string", "maxLength": 160 },
+        "number": { "type": "number" },
+        "label": { "type": "string", "maxLength": 100 },
+        "dueDate": { "type": "string", "maxLength": 30 },
+        "amount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["PENDENTE", "PARCIAL", "PAGO", "ATRASADO"] },
+        "paymentMethod": { "type": "string", "maxLength": 60 },
+        "paidAt": { "type": "string", "maxLength": 40 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "paymentHistory": { "type": "array" },
+        "pendingPayments": { "type": "array" },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["contractId", "eventId", "number", "label", "dueDate", "amount", "paidAmount", "status", "paymentHistory", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "ReceiptRecord": {
+      "title": "ReceiptRecord",
+      "description": "Comprovante oficial em PDF emitido para pagamento confirmado.",
+      "type": "object",
+      "properties": {
+        "receiptNumber": { "type": "string", "maxLength": 60 },
+        "installmentId": { "type": "string", "maxLength": 128 },
+        "contractId": { "type": "string", "maxLength": 128 },
+        "eventId": { "type": "string", "maxLength": 128 },
+        "coupleName": { "type": "string", "maxLength": 160 },
+        "eventName": { "type": "string", "maxLength": 160 },
+        "eventDate": { "type": "string", "maxLength": 30 },
+        "amount": { "type": "number" },
+        "receivedAt": { "type": "string", "maxLength": 30 },
+        "paymentMethod": { "type": "string", "maxLength": 60 },
+        "installmentLabel": { "type": "string", "maxLength": 100 },
+        "contractedValue": { "type": "number" },
+        "totalPaid": { "type": "number" },
+        "remainingBalance": { "type": "number" },
+        "paymentId": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 500 },
+        "fileName": { "type": "string", "maxLength": 200 },
+        "storagePath": { "type": "string", "maxLength": 400 },
+        "downloadUrl": { "type": "string", "maxLength": 1000 },
+        "documentId": { "type": "string", "maxLength": 128 },
+        "emittedBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "emittedByName": { "type": "string", "maxLength": 120 },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["receiptNumber", "installmentId", "contractId", "eventId", "coupleName", "amount", "receivedAt", "paymentMethod", "emittedBy", "authorizedUids", "createdAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Despesa fixa, variável, geral ou vinculada a evento.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "type": { "type": "string", "enum": ["FIXA", "VARIAVEL", "EVENTO", "GERAL"] },
+        "category": { "type": "string", "maxLength": 80 },
+        "amount": { "type": "number" },
+        "date": { "type": "string", "maxLength": 30 },
+        "eventId": { "type": "string", "maxLength": 128 },
+        "eventName": { "type": "string", "maxLength": 160 },
+        "responsibleId": { "type": "string", "maxLength": 128 },
+        "responsibleName": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["PENDENTE", "PAGO"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "category", "amount", "date", "status", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "TeamMember": {
+      "title": "TeamMember",
+      "description": "Integrante permanente ou situacional da equipe 4EVER.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "roleTitle": { "type": "string", "maxLength": 100 },
+        "profileRole": { "type": "string", "enum": ["MASTER_ADMIN", "OPERATIONAL_ADMIN", "MEMBER", "VIEWER"] },
+        "classification": { "type": "string", "enum": ["PERMANENTE", "SITUACIONAL"] },
+        "status": { "type": "string", "enum": ["ATIVO", "INATIVO"] },
+        "email": { "type": "string", "maxLength": 160 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "photoUrl": { "type": "string", "maxLength": 1000 },
+        "photoStoragePath": { "type": "string", "maxLength": 400 },
+        "linkedEventIds": { "type": "array" },
+        "responsibilities": { "type": "string", "maxLength": 1000 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "remunerationPerEvent": { "type": "number" },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "roleTitle", "profileRole", "status", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "PartnerRecord": {
+      "title": "PartnerRecord",
+      "description": "Parceiro ou fornecedor comercial da 4EVER com avaliação e logo.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 140 },
+        "category": { "type": "string", "maxLength": 80 },
+        "city": { "type": "string", "maxLength": 100 },
+        "phone": { "type": "string", "maxLength": 40 },
+        "email": { "type": "string", "maxLength": 160 },
+        "instagram": { "type": "string", "maxLength": 120 },
+        "website": { "type": "string", "maxLength": 240 },
+        "rating": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1500 },
+        "logoUrl": { "type": "string", "maxLength": 1000 },
+        "logoStoragePath": { "type": "string", "maxLength": 400 },
+        "active": { "type": "boolean" },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "category", "rating", "active", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "DocumentFolder": {
+      "title": "DocumentFolder",
+      "description": "Pasta ou subpasta organizacional da central de documentos.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "parentId": { "type": "string", "maxLength": 128 },
+        "description": { "type": "string", "maxLength": 300 },
+        "authorizedUids": { "type": "array" },
+        "createdBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "authorizedUids", "createdBy", "createdAt", "updatedAt"]
+    },
+    "DocumentRecord": {
+      "title": "DocumentRecord",
+      "description": "Metadados e referência segura de documento vinculado a evento, casal, parceiro, integrante, orçamento ou pagamento.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "folderId": { "type": "string", "maxLength": 128 },
+        "fileName": { "type": "string", "maxLength": 200 },
+        "mimeType": { "type": "string", "maxLength": 120 },
+        "fileSize": { "type": "number" },
+        "storagePath": { "type": "string", "maxLength": 400 },
+        "downloadUrl": { "type": "string", "maxLength": 1000 },
+        "storageMode": { "type": "string", "enum": ["FIREBASE_STORAGE", "METADATA_ONLY"] },
+        "isTemplate": { "type": "boolean" },
+        "eventId": { "type": "string", "maxLength": 128 },
+        "eventName": { "type": "string", "maxLength": 160 },
+        "coupleId": { "type": "string", "maxLength": 128 },
+        "coupleName": { "type": "string", "maxLength": 160 },
+        "contractId": { "type": "string", "maxLength": 128 },
+        "partnerId": { "type": "string", "maxLength": 128 },
+        "partnerName": { "type": "string", "maxLength": 160 },
+        "memberId": { "type": "string", "maxLength": 128 },
+        "memberName": { "type": "string", "maxLength": 160 },
+        "quoteId": { "type": "string", "maxLength": 128 },
+        "paymentId": { "type": "string", "maxLength": 128 },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "uploadedBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uploadedByName": { "type": "string", "maxLength": 120 },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "category", "storageMode", "uploadedBy", "authorizedUids", "createdAt", "updatedAt"]
+    },
+    "PdfTemplate": {
+      "title": "PdfTemplate",
+      "description": "Modelo oficial de orçamento em PDF configurável e substituível pelo Administrador Master.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "version": { "type": "string", "maxLength": 40 },
+        "fileName": { "type": "string", "maxLength": 200 },
+        "storagePath": { "type": "string", "maxLength": 400 },
+        "downloadUrl": { "type": "string", "maxLength": 1000 },
+        "storageMode": { "type": "string", "enum": ["FIREBASE_STORAGE", "REFERENCE_ASSET", "INLINE_BASE64"] },
+        "baseDataUrl": { "type": "string", "maxLength": 900000 },
+        "isActive": { "type": "boolean" },
+        "isSystemDefault": { "type": "boolean" },
+        "fieldMappings": { "type": "array" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "uploadedBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "uploadedByName": { "type": "string", "maxLength": 120 },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "version", "fileName", "storageMode", "isActive", "fieldMappings", "uploadedBy", "authorizedUids", "createdAt", "updatedAt"]
+    },
+    "QuoteEmission": {
+      "title": "QuoteEmission",
+      "description": "Registro de PDF oficial emitido a partir de um orçamento e modelo.",
+      "type": "object",
+      "properties": {
+        "quoteId": { "type": "string", "maxLength": 128 },
+        "quoteCode": { "type": "string", "maxLength": 60 },
+        "coupleName": { "type": "string", "maxLength": 160 },
+        "templateId": { "type": "string", "maxLength": 128 },
+        "templateName": { "type": "string", "maxLength": 160 },
+        "templateVersion": { "type": "string", "maxLength": 40 },
+        "fileName": { "type": "string", "maxLength": 200 },
+        "storagePath": { "type": "string", "maxLength": 400 },
+        "downloadUrl": { "type": "string", "maxLength": 1000 },
+        "storageMode": { "type": "string", "enum": ["FIREBASE_STORAGE", "GENERATED_ON_DEMAND"] },
+        "documentId": { "type": "string", "maxLength": 128 },
+        "emittedBy": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "emittedByName": { "type": "string", "maxLength": 120 },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["quoteCode", "coupleName", "templateName", "fileName", "storageMode", "emittedBy", "authorizedUids", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Registro imutável de auditoria administrativa e operacional.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "userName": { "type": "string", "maxLength": 120 },
+        "action": { "type": "string", "maxLength": 80 },
+        "entityType": { "type": "string", "maxLength": 60 },
+        "entityId": { "type": "string", "maxLength": 128 },
+        "entityLabel": { "type": "string", "maxLength": 200 },
+        "previousValueSummary": { "type": "string", "maxLength": 1000 },
+        "newValueSummary": { "type": "string", "maxLength": 1000 },
+        "authorizedUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "action", "entityType", "entityId", "authorizedUids", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Contas de usuário com perfil RBAC e PII restrita ao próprio usuário ou administradores."
+    },
+    "/invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/Invite" },
+      "description": "Convites de equipe gerenciados pelo Administrador Master."
+    },
+    "/systemConfig/{configId}": {
+      "schema": { "$ref": "#/entities/SystemConfig" },
+      "description": "Configuração geral persistente da 4EVER Management."
+    },
+    "/fuelHistory/{entryId}": {
+      "schema": { "$ref": "#/entities/FuelHistoryEntry" },
+      "description": "Histórico de preços de combustível."
+    },
+    "/packages/{packageId}": {
+      "schema": { "$ref": "#/entities/Package" },
+      "description": "Pacotes de assessoria (Love, Forever)."
+    },
+    "/activities/{activityId}": {
+      "schema": { "$ref": "#/entities/Activity" },
+      "description": "Atividades configuráveis dos pacotes."
+    },
+    "/couples/{coupleId}": {
+      "schema": { "$ref": "#/entities/Couple" },
+      "description": "Cadastro de casais/clientes."
+    },
+    "/quotes/{quoteId}": {
+      "schema": { "$ref": "#/entities/Quote" },
+      "description": "Orçamentos salvos."
+    },
+    "/quotes/{quoteId}/versions/{versionId}": {
+      "schema": { "$ref": "#/entities/QuoteVersion" },
+      "description": "Versões históricas imutáveis de cada orçamento."
+    },
+    "/events/{eventId}": {
+      "schema": { "$ref": "#/entities/Event" },
+      "description": "Eventos e casamentos."
+    },
+    "/events/{eventId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/EventTask" },
+      "description": "Checklist e tarefas de cada evento."
+    },
+    "/events/{eventId}/timeline/{itemId}": {
+      "schema": { "$ref": "#/entities/EventTimelineItem" },
+      "description": "Cronograma do dia do casamento."
+    },
+    "/scheduleBlocks/{blockId}": {
+      "schema": { "$ref": "#/entities/ScheduleBlock" },
+      "description": "Bloqueios de datas e períodos indisponíveis no calendário."
+    },
+    "/contracts/{contractId}": {
+      "schema": { "$ref": "#/entities/Contract" },
+      "description": "Contratos financeiros vinculados a eventos."
+    },
+    "/installments/{installmentId}": {
+      "schema": { "$ref": "#/entities/Installment" },
+      "description": "Parcelas de pagamento vinculadas a contratos e eventos."
+    },
+    "/receipts/{receiptId}": {
+      "schema": { "$ref": "#/entities/ReceiptRecord" },
+      "description": "Comprovantes oficiais em PDF emitidos de recebimentos."
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Despesas fixas, variáveis e por evento."
+    },
+    "/teamMembers/{memberId}": {
+      "schema": { "$ref": "#/entities/TeamMember" },
+      "description": "Integrantes operacionais permanentes e situacionais da equipe."
+    },
+    "/partners/{partnerId}": {
+      "schema": { "$ref": "#/entities/PartnerRecord" },
+      "description": "Parceiros e fornecedores comerciais da 4EVER."
+    },
+    "/documentFolders/{folderId}": {
+      "schema": { "$ref": "#/entities/DocumentFolder" },
+      "description": "Pastas e subpastas organizacionais da central de documentos."
+    },
+    "/documents/{documentId}": {
+      "schema": { "$ref": "#/entities/DocumentRecord" },
+      "description": "Documentos e metadados vinculados."
+    },
+    "/pdfTemplates/{templateId}": {
+      "schema": { "$ref": "#/entities/PdfTemplate" },
+      "description": "Modelos de orçamento em PDF configuráveis pelo Master."
+    },
+    "/quoteEmissions/{emissionId}": {
+      "schema": { "$ref": "#/entities/QuoteEmission" },
+      "description": "Histórico de propostas PDF emitidas."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Log imutável de auditoria administrativa e operacional."
+    }
+  }
+}
