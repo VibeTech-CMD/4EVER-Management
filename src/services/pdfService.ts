@@ -273,7 +273,8 @@ export async function generatePaymentReceiptPdf(
 
   // Embed official 4EVER white-on-dark logo & watermark monogram
   try {
-    const logoBytes = await fetchBinaryBytes('/assets/aistudio/Code_Generated_Image_bab81833.png');
+    const base = import.meta.env.BASE_URL || './';
+    const logoBytes = await fetchBinaryBytes(`${base}assets/aistudio/Code_Generated_Image_bab81833.png`);
     const logoImg = await pdfDoc.embedPng(logoBytes);
     const dims = logoImg.scaleToFit(170, 52);
     page.drawImage(logoImg, {
@@ -317,8 +318,9 @@ export async function generatePaymentReceiptPdf(
 
   // Optional subtle monogram seal
   try {
+    const base = import.meta.env.BASE_URL || './';
     const monoBytes = await fetchBinaryBytes(
-      '/assets/aistudio/Monograma-4Ever-VerdeEscuro-Bege_cda07930.png'
+      `${base}assets/aistudio/Monograma-4Ever-VerdeEscuro-Bege_cda07930.png`
     );
     const monoImg = await pdfDoc.embedPng(monoBytes);
     page.drawImage(monoImg, {

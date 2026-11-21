@@ -15,9 +15,17 @@ Plataforma interna de gestão operacional, comercial e financeira da **4EVER Ass
 - Os uploads reais dos usuários são armazenados exclusivamente no **Firebase Storage** e seus metadados no **Cloud Firestore**.
 - Utilize o botão **Exportar Backup JSON** em `Configuração Geral` sempre que desejar gerar uma cópia portátil dos dados operacionais.
 
-## Publicando no GitHub
+## Publicando no GitHub e GitHub Pages
 
-Após baixar ou exportar o código-fonte do projeto para sua máquina:
+Após enviar ou sincronizar este projeto no repositório GitHub (por exemplo, `https://github.com/vibetech-cmd/4ever-management`):
+
+1. **GitHub Pages (Importante — não use `Deploy from a branch: main / root`):**
+   - Este projeto usa **React + TypeScript + Vite**, portanto o navegador não executa os arquivos de `src/` sem antes gerar o build (`npm run build`).
+   - No GitHub, acesse **Settings → Pages → Build and deployment → Source** e selecione **GitHub Actions** (o workflow `.github/workflows/deploy.yml` já incluído no projeto compilará e publicará a pasta `dist/` automaticamente a cada push na branch `main`).
+2. **Firebase Authentication:**
+   - Acesse **Firebase Console → Authentication → Settings → Authorized domains** e adicione `vibetech-cmd.github.io` para liberar o login na URL do GitHub Pages.
+
+Caso envie manualmente pelo terminal:
 
 ```bash
 git init
@@ -27,8 +35,6 @@ git branch -M main
 git remote add origin https://github.com/vibetech-cmd/4ever-management.git
 git push -u origin main
 ```
-
-*(Crie o repositório `4ever-management` na sua conta GitHub antes de executar o `git push`.)*
 
 ## Execução Local
 

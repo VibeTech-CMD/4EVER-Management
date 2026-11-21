@@ -5,10 +5,12 @@ interface LogoProps {
   className?: string;
 }
 
-export const OFFICIAL_FULL_LOGO_DARK = '/assets/aistudio/Logo-Verde_Escuro_com_bege__2__d0f0c663.png';
-export const OFFICIAL_FULL_LOGO_LIGHT = '/assets/aistudio/Code_Generated_Image_bab81833.png';
-export const OFFICIAL_MONOGRAM_GREEN = '/assets/aistudio/Monograma-4Ever-VerdeEscuro-Bege_cda07930.png';
-export const OFFICIAL_MONOGRAM_BROWN = '/assets/aistudio/Monograma-4Ever-Marrom-Original_91bc583e.png';
+const BASE = import.meta.env.BASE_URL || './';
+
+export const OFFICIAL_FULL_LOGO_DARK = `${BASE}assets/aistudio/Logo-Verde_Escuro_com_bege__2__d0f0c663.png`;
+export const OFFICIAL_FULL_LOGO_LIGHT = `${BASE}assets/aistudio/Code_Generated_Image_bab81833.png`;
+export const OFFICIAL_MONOGRAM_GREEN = `${BASE}assets/aistudio/Monograma-4Ever-VerdeEscuro-Bege_cda07930.png`;
+export const OFFICIAL_MONOGRAM_BROWN = `${BASE}assets/aistudio/Monograma-4Ever-Marrom-Original_91bc583e.png`;
 
 export const FourEverFullLogo: React.FC<LogoProps> = ({
   variant = 'dark-on-light',

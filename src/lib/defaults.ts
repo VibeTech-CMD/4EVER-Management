@@ -10,7 +10,8 @@ import type {
 } from './types';
 
 export const BOOTSTRAP_MASTER_EMAIL = 'cleisson.md@gmail.com';
-export const DEFAULT_PDF_TEMPLATE_URL = '/assets/aistudio/Proposta_-_Gilbert_e_Andressa_bd88d108.pdf';
+const BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as { env?: { BASE_URL?: string } }).env?.BASE_URL) || './';
+export const DEFAULT_PDF_TEMPLATE_URL = `${BASE_URL}assets/aistudio/Proposta_-_Gilbert_e_Andressa_bd88d108.pdf`;
 
 export const DEFAULT_DOCUMENT_CATEGORIES: string[] = [
   'Contratos',

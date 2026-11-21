@@ -42,6 +42,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         return 'A janela de autenticação Google foi fechada antes da conclusão.';
       case 'auth/popup-blocked':
         return 'O navegador bloqueou o pop-up do Google. Permita pop-ups para este domínio e tente novamente.';
+      case 'auth/unauthorized-domain':
+        return `O domínio atual (${window.location.hostname}) ainda não está autorizado no Firebase Authentication. Adicione "${window.location.hostname}" em Firebase Console → Authentication → Settings → Authorized domains.`;
       default:
         return err instanceof Error ? err.message : 'Não foi possível concluir o acesso.';
     }
